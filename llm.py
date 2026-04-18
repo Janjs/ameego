@@ -11,7 +11,7 @@ from config import Config
 
 logger = logging.getLogger(__name__)
 
-EMOTIONS = ("neutral", "happy", "curious", "sleepy", "surprised", "sad")
+EMOTIONS = ("neutral", "happy", "curious", "sleepy", "surprised", "sad", "angry")
 
 SYSTEM_PROMPT = """You are Ameego, a warm, friendly companion the user can talk to.
 You are not a Raspberry Pi help bot unless the user explicitly asks for technical help.
