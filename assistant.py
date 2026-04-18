@@ -84,6 +84,50 @@ class AmeegoAssistant:
         self.eyes.stop()
         logger.info("Dry-run finished successfully")
 
+    def speak_text_reply(self, user_text: str) -> str:
+        prompt = user_text.strip()
+        if not prompt:
+            raise ValueError("Text prompt cannot be empty.")
+
+        self.eyes.start()
+        self.eyes.set_state("thinking")
+        reply = self.llm.respond(prompt)
+
+        with self._temp_path("ameego-output-", ".wav") as output_path:
+            self.tts.synthesize_to_file(reply, output_path)
+            self.eyes.set_state("speaking")
+            duration = self.audio.play_wav(output_path)
+            self.last_activity = time.monotonic()
+            logger.info("Playback duration %.2f seconds", duration)
+
+        self.eyes.set_state("idle")
+        return reply
+
+    def run_text_chat_loop(self) -> None:
+        logger.info("Text chat mode enabled. Type a message and press Enter. Type q to quit.")
+        self.eyes.start()
+        self.eyes.set_state("idle")
+        try:
+            while True:
+                self._update_idle_state()
+                prompt = input("> ").strip()
+                if prompt.lower() in {"q", "quit", "exit"}:
+                    logger.info("Exiting text chat loop.")
+                    return
+                if not prompt:
+                    continue
+                try:
+                    reply = self.speak_text_reply(prompt)
+                    print(f"{self.config.robot_name}: {reply}")
+                    sleep_with_interrupt(self.config.playback_cooldown_seconds)
+                except Exception:
+                    logger.exception("Text chat interaction failed")
+                    self.eyes.set_state("error")
+                    sleep_with_interrupt(1.0)
+                    self.eyes.set_state("idle")
+        finally:
+            self.eyes.stop()
+
     def _run_push_to_talk_loop(self) -> None:
         logger.info("Push-to-talk mode enabled. Press Enter to ask a question, or type q then Enter to quit.")
         while True:
@@ -172,6 +216,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--windowed-eyes", action="store_true", help="Run eyes in a window instead of fullscreen")
     parser.add_argument("--dry-run", action="store_true", help="Run diagnostics without the wake-word loop")
     parser.add_argument("--push-to-talk", action="store_true", help="Use Enter-to-talk instead of wake-word detection")
+    parser.add_argument("--text-chat", action="store_true", help="Type prompts in SSH and hear spoken replies")
+    parser.add_argument("--text", help="Send a single text prompt and play the spoken reply")
     parser.add_argument("--list-devices", action="store_true", help="Print audio devices and exit")
     return parser
 
@@ -199,6 +245,16 @@ def main() -> None:
 
     if args.dry_run:
         assistant.dry_run()
+        return
+
+    if args.text:
+        reply = assistant.speak_text_reply(args.text)
+        print(f"{config.robot_name}: {reply}")
+        assistant.eyes.stop()
+        return
+
+    if args.text_chat:
+        assistant.run_text_chat_loop()
         return
 
     assistant.run()

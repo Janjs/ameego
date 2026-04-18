@@ -33,6 +33,7 @@ ameego/
 - Push-to-talk fallback mode for debugging over SSH
 - Dry-run diagnostics mode for mic, speaker, and OpenAI connectivity
 - Pi-native animated robot eyes using `pygame`
+- Text-only SSH mode that skips the microphone and still speaks replies
 - Environment-driven configuration
 - Systemd service for long-lived operation
 - ALSA-friendly device configuration and troubleshooting commands
@@ -174,6 +175,24 @@ python assistant.py --push-to-talk --disable-eyes
 ```
 
 Press Enter, ask a question, wait for the reply, then type `q` to quit.
+
+### 9b. Run text-only over SSH with no microphone
+
+Interactive text chat:
+
+```bash
+source .venv/bin/activate
+python assistant.py --text-chat --disable-eyes
+```
+
+One-shot prompt:
+
+```bash
+source .venv/bin/activate
+python assistant.py --text "What time is sunset in Amsterdam today?" --disable-eyes
+```
+
+This path does not record from the microphone. It sends your typed message to the model, speaks the reply through the configured speaker device, and prints the reply back to the SSH terminal.
 
 ### 10. Run the full wake-word loop
 

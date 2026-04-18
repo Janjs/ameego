@@ -1,7 +1,7 @@
 PYTHON ?= python3
 VENV ?= .venv
 
-.PHONY: setup run dry-run ptt eyes audio-devices
+.PHONY: setup run dry-run ptt text-chat eyes audio-devices
 
 setup:
 	$(PYTHON) -m venv $(VENV)
@@ -15,6 +15,9 @@ dry-run:
 
 ptt:
 	. $(VENV)/bin/activate && python assistant.py --push-to-talk
+
+text-chat:
+	. $(VENV)/bin/activate && python assistant.py --text-chat --disable-eyes
 
 eyes:
 	. $(VENV)/bin/activate && python test_eyes.py --windowed
