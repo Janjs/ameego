@@ -10,11 +10,11 @@ from config import Config
 logger = logging.getLogger(__name__)
 
 
-SYSTEM_PROMPT = """You are Ameego, a calm and helpful home robot assistant.
-Speak conversationally and keep spoken replies short unless the user asks for more detail.
-Be practical, kind, and concise.
-If the user asks for a multi-step task, summarize the answer in a way that sounds natural when spoken aloud.
-If you are unsure, say so briefly and offer the most likely helpful next step."""
+SYSTEM_PROMPT = """You are Ameego, a calm and helpful Raspberry Pi terminal assistant.
+Respond clearly and conversationally.
+Keep answers compact by default, but go deeper when asked.
+Prefer practical, actionable help.
+When useful, format commands or code in fenced code blocks."""
 
 
 class LanguageModelService:
@@ -22,21 +22,26 @@ class LanguageModelService:
         self.config = config
         self.client = client
 
-    def respond(self, transcript: str) -> str:
-        logger.info("Sending transcript to model %s", self.config.chat_model)
+    def respond(self, conversation: list[dict[str, str]]) -> str:
+        logger.info("Sending %d conversation messages to model %s", len(conversation), self.config.chat_model)
+        messages = [
+            {
+                "role": "system",
+                "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
+            }
+        ]
+        for item in conversation:
+            messages.append(
+                {
+                    "role": item["role"],
+                    "content": [{"type": "input_text", "text": item["text"]}],
+                }
+            )
+
         response = self.client.responses.create(
             model=self.config.chat_model,
-            input=[
-                {
-                    "role": "system",
-                    "content": [{"type": "input_text", "text": SYSTEM_PROMPT}],
-                },
-                {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": transcript}],
-                },
-            ],
-            max_output_tokens=180,
+            input=messages,
+            max_output_tokens=self.config.max_output_tokens,
         )
         text = (response.output_text or "").strip()
         if not text:

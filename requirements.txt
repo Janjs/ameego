@@ -1,6 +1,2 @@
 openai>=1.75.0
-numpy>=1.26.4
-sounddevice>=0.4.7
-soundfile>=0.12.1
 python-dotenv>=1.0.1
-pygame>=2.5.2

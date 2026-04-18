@@ -1,8 +1,8 @@
 # Ameego
 
-A local-first Raspberry Pi voice assistant built in Python. It listens for a wake word with `openWakeWord`, sends recorded speech to OpenAI for transcription and response generation, speaks replies through your AUX speakers, and can render animated robot eyes on a Pi-connected display.
+Ameego is a simple SSH-first Raspberry Pi terminal assistant in Python. You type messages in the terminal, it sends them to OpenAI, and it prints back clear replies while keeping the current conversation in memory.
 
-## Proposed file tree
+## File tree
 
 ```text
 ameego/
@@ -10,17 +10,9 @@ ameego/
 ├── Makefile
 ├── README.md
 ├── assistant.py
-├── audio.py
 ├── config.py
-├── eyes.py
 ├── llm.py
 ├── requirements.txt
-├── requirements-wakeword.txt
-├── stt.py
-├── test_audio_devices.py
-├── test_eyes.py
-├── tts.py
-├── wakeword.py
 ├── deploy/
 │   └── ameego.service
 └── scripts/
@@ -29,70 +21,28 @@ ameego/
 
 ## Features
 
-- Wake-word pipeline with `openWakeWord`
-- Push-to-talk fallback mode for debugging over SSH
-- Dry-run diagnostics mode for mic, speaker, and OpenAI connectivity
-- Pi-native animated robot eyes using `pygame`
-- Text-only SSH mode that skips the microphone and still speaks replies
+- Interactive terminal chat over SSH
+- One-shot prompt mode for scripting
+- Conversation memory during the current session
 - Environment-driven configuration
-- Systemd service for long-lived operation
-- ALSA-friendly device configuration and troubleshooting commands
+- Minimal Raspberry Pi setup with no audio or display dependencies
 
 ## Architecture
 
-1. `wakeword.py` monitors the microphone for a wake-word score.
-2. `audio.py` records the user query until silence.
-3. `stt.py` sends the WAV recording to OpenAI transcription.
-4. `llm.py` asks an OpenAI chat/reasoning model for a short spoken answer.
-5. `tts.py` synthesizes a WAV reply with OpenAI TTS.
-6. `audio.py` plays the response through the configured AUX output.
-7. `eyes.py` animates visual states alongside the voice pipeline.
+1. `assistant.py` runs a simple terminal REPL.
+2. `config.py` loads environment variables.
+3. `llm.py` sends conversation history to OpenAI and returns the reply.
 
 ## Raspberry Pi setup
 
-The commands below assume:
-
-- Pi hostname or IP is reachable over SSH
-- Python 3.11+ is installed
-- Your USB mic should be `card 2, device 0`
-- Your AUX output should be `card 1, device 0`
-
-### 1. Copy the project to the Pi
-
-From this computer:
+### 1. Clone the project
 
 ```bash
-rsync -av --delete /Users/jan/Developer/ameego/ pi@YOUR_PI_HOST:~/ameego/
-```
-
-Or with plain `scp`:
-
-```bash
-scp -r /Users/jan/Developer/ameego pi@YOUR_PI_HOST:~/
-```
-
-### 2. SSH into the Pi
-
-```bash
-ssh pi@YOUR_PI_HOST
+git clone https://github.com/Janjs/ameego.git
 cd ~/ameego
 ```
 
-### 3. Install system packages
-
-```bash
-sudo apt update
-sudo apt install -y \
-  python3 python3-venv python3-pip \
-  portaudio19-dev libportaudio2 libsndfile1 \
-  libsdl2-2.0-0 libsdl2-dev ffmpeg \
-  libatlas-base-dev libopenblas-dev \
-  alsa-utils
-```
-
-If your Pi is running 32-bit Raspberry Pi OS (`armv7l`), `openWakeWord` may fail because `onnxruntime` wheels are not available there. In that case, install the base app first and use push-to-talk mode. Wake-word mode is best supported on 64-bit Raspberry Pi OS.
-
-### 4. Create a virtualenv and install Python dependencies
+### 2. Create a virtualenv and install dependencies
 
 ```bash
 python3 -m venv .venv
@@ -101,19 +51,7 @@ python -m pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
 ```
 
-If your Pi is 64-bit and you want wake-word support:
-
-```bash
-pip install -r requirements-wakeword.txt
-```
-
-If your Pi is 32-bit, skip `requirements-wakeword.txt` and use:
-
-```bash
-python assistant.py --push-to-talk
-```
-
-### 5. Configure environment variables
+### 3. Configure environment variables
 
 ```bash
 cp .env.example .env
@@ -123,166 +61,46 @@ nano .env
 Minimum `.env` changes:
 
 - Set `OPENAI_API_KEY`
-- Confirm `AUDIO_INPUT_DEVICE=plughw:2,0`
-- Confirm `AUDIO_OUTPUT_DEVICE=plughw:1,0`
-- Decide whether `EYES_ENABLED=true`
+- Optionally change `ROBOT_NAME`
+- Optionally change `OPENAI_CHAT_MODEL`
 
-### 6. Inspect devices
-
-```bash
-source .venv/bin/activate
-python assistant.py --list-devices
-arecord -l
-aplay -l
-```
-
-### 7. Run dry-run diagnostics
+### 4. Run Ameego interactively over SSH
 
 ```bash
 source .venv/bin/activate
-python assistant.py --dry-run --disable-eyes
-```
-
-This should:
-
-- list audio devices
-- record a short mic sample
-- transcribe it with OpenAI
-- synthesize a short spoken confirmation
-- play the result through the configured speaker device
-
-### 8. Test eyes
-
-Windowed on desktop:
-
-```bash
-source .venv/bin/activate
-python test_eyes.py --windowed
-```
-
-Fullscreen on Pi display:
-
-```bash
-source .venv/bin/activate
-python test_eyes.py
-```
-
-### 9. Run assistant in push-to-talk mode first
-
-```bash
-source .venv/bin/activate
-python assistant.py --push-to-talk --disable-eyes
-```
-
-Press Enter, ask a question, wait for the reply, then type `q` to quit.
-
-### 9b. Run text-only over SSH with no microphone
-
-Interactive text chat:
-
-```bash
-source .venv/bin/activate
-python assistant.py --text-chat --disable-eyes
-```
-
-One-shot prompt:
-
-```bash
-source .venv/bin/activate
-python assistant.py --text "What time is sunset in Amsterdam today?" --disable-eyes
-```
-
-This path does not record from the microphone. It sends your typed message to the model, speaks the reply through the configured speaker device, and prints the reply back to the SSH terminal.
-
-### 10. Run the full wake-word loop
-
-```bash
-source .venv/bin/activate
-pip install -r requirements-wakeword.txt
 python assistant.py
 ```
 
-If you do not yet have a custom `"Hey Nomi"` model, the app falls back to the built-in `openWakeWord` model named in `WAKEWORD_BUILTIN_MODEL` (default: `hey_jarvis`). Later, place your custom model file on the Pi and set:
+You will see a simple terminal UI:
 
-```env
-WAKEWORD_MODEL_PATH=/home/pi/ameego/models/hey_nomi.onnx
+```text
+Ameego terminal chat
+Type a message and press Enter.
+Commands: /help, /clear, /quit
 ```
 
-## Smoke test checklist
-
-1. Verify mic:
+### 5. Run a single prompt
 
 ```bash
-python test_audio_devices.py --record-seconds 3
+python assistant.py --text "Summarize why my Raspberry Pi setup kept failing earlier"
 ```
 
-2. Verify playback:
+## Commands inside the terminal app
+
+- `/help` shows commands
+- `/clear` clears conversation history
+- `/quit` exits the app
+
+## Make targets
 
 ```bash
-python test_audio_devices.py --play-tone
+make setup
+make run
+make once
 ```
 
-3. Verify STT:
+## Notes
 
-```bash
-python assistant.py --dry-run --disable-eyes
-```
-
-4. Verify TTS:
-
-`--dry-run` also checks TTS and playback.
-
-5. Verify eyes:
-
-```bash
-python test_eyes.py --windowed
-```
-
-6. Verify full cycle:
-
-```bash
-python assistant.py --push-to-talk
-python assistant.py
-```
-
-## Systemd
-
-Install the bundled service file:
-
-```bash
-sudo cp deploy/ameego.service /etc/systemd/system/ameego.service
-sudo systemctl daemon-reload
-sudo systemctl enable ameego.service
-sudo systemctl start ameego.service
-sudo systemctl status ameego.service
-```
-
-Logs:
-
-```bash
-journalctl -u ameego.service -f
-```
-
-## Start script
-
-The provided start script activates the virtualenv, loads `.env`, and launches the assistant:
-
-```bash
-./scripts/start_ameego.sh --disable-eyes
-```
-
-## ALSA troubleshooting
-
-- If playback is silent, confirm `aplay -l` still shows the analog output at `card 1, device 0`.
-- If recording fails, confirm `arecord -l` still shows the USB microphone at `card 2, device 0`.
-- Try `plughw:2,0` and `plughw:1,0` before raw `hw:` devices to reduce format mismatch problems.
-- If `sounddevice` lists a different device name than expected, copy that exact name into `.env`.
-- If the assistant hears itself, increase `PLAYBACK_COOLDOWN_SECONDS` to `1.5` or `2.0`.
-- If wake-word detection feels too eager or too sluggish, tune `WAKEWORD_THRESHOLD` up or down by `0.05`.
-- If `pip install -r requirements-wakeword.txt` fails with `onnxruntime` on `armv7l`, your Pi is on 32-bit userspace. Use push-to-talk or reinstall a 64-bit Raspberry Pi OS.
-- If `pygame` fails over SSH without a display, run with `--disable-eyes` or export `SDL_VIDEODRIVER=dummy`.
-- If your Pi uses PipeWire or PulseAudio on top of ALSA, double-check which backend `sounddevice` resolves to when you list devices.
-
-## Notes on the eye renderer
-
-The Pi implementation is native Python and only visually inspired by FluxGarage RoboEyes. It does not depend on the Arduino library. The renderer is intentionally separated so you can later swap it for an SPI OLED/TFT or microcontroller-driven display path.
+- Conversation history is kept only for the current process.
+- This version does not use the microphone, speakers, wake word, or eyes.
+- The included `deploy/ameego.service` file is left in the repo from the earlier voice-oriented version, but it is not useful for an interactive SSH-only workflow.
