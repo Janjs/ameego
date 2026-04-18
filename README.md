@@ -26,14 +26,15 @@ ameego/
 - Conversation memory during the current session
 - Environment-driven configuration
 - Fullscreen desktop mirror on the Pi display
+- Pixel-eye mood display driven by the LLM
 - Spoken replies through the Pi speaker output
 
 ## Architecture
 
 1. `assistant.py` runs a simple terminal REPL.
 2. `config.py` loads environment variables.
-3. `llm.py` sends conversation history to OpenAI and returns the reply.
-4. `assistant.py` mirrors the conversation into a simple fullscreen Tk window on the Pi desktop.
+3. `llm.py` sends conversation history to OpenAI, selects an eye emotion via a tool call, and returns the spoken reply.
+4. `assistant.py` mirrors the conversation into a simple fullscreen Tk window on the Pi desktop with animated robot eyes.
 5. `tts.py` sends the reply to OpenAI TTS and plays it with `aplay`.
 
 ## Raspberry Pi setup
@@ -84,7 +85,7 @@ Type a message and press Enter.
 Commands: /help, /clear, /quit
 ```
 
-If the Pi is logged into its desktop session, the same conversation will also appear in a fullscreen window on the attached display. While a reply is loading, the Pi screen shows `thinking...`. Press `Esc` on the Pi keyboard to leave fullscreen.
+If the Pi is logged into its desktop session, the same conversation will also appear in a fullscreen window on the attached display. The top of the screen shows simple pixel eyes that change emotion with each reply, and while a reply is loading the eyes animate in a scanning state. Press `Esc` on the Pi keyboard to leave fullscreen.
 By default, the app assumes `DISPLAY=:0` and `~/.Xauthority`, which matches the common Raspberry Pi desktop setup.
 
 ### 5. Run a single prompt
@@ -110,6 +111,6 @@ make once
 ## Notes
 
 - Conversation history is kept only for the current process.
-- This version does not use the microphone, wake word, or eyes.
+- This version does not use the microphone or wake word.
 - If your Pi uses a different desktop display or Xauthority path, override `APP_UI_DISPLAY` or `APP_UI_XAUTHORITY` in `.env`.
 - The included `deploy/ameego.service` file is left in the repo from the earlier voice-oriented version, but it is not useful for an interactive SSH-only workflow.

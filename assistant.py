@@ -13,11 +13,45 @@ from itertools import count
 from openai import OpenAI
 
 from config import Config, configure_logging
-from llm import LanguageModelService
+from llm import AssistantReply, LanguageModelService
 from tts import TextToSpeechService
 
 
 logger = logging.getLogger(__name__)
+
+EYE_COLORS = {
+    "bg": "#05060b",
+    "panel": "#10131d",
+    "pixel_off": "#161d29",
+    "pixel_on": "#33e7f0",
+    "glow": "#82f7fb",
+    "text": "#f2f6fb",
+}
+
+EMOTION_FRAMES: dict[str, list[tuple[tuple[str, ...], tuple[str, ...]]]] = {
+    "neutral": [(("01110", "11111", "11111", "11111", "11111", "11111", "01110"),) * 2],
+    "happy": [(("00000", "00111", "01111", "11111", "11111", "01110", "00100"),) * 2],
+    "curious": [
+        (
+            ("00110", "01110", "11110", "11110", "11110", "01110", "00110"),
+            ("01100", "01110", "01111", "01111", "01111", "01110", "01100"),
+        )
+    ],
+    "sleepy": [(("00000", "00000", "11111", "11111", "01110", "00000", "00000"),) * 2],
+    "surprised": [
+        (
+            ("01110", "11111", "11111", "11111", "11111", "11111", "01110"),
+            ("00100", "01110", "11111", "11111", "11111", "01110", "00100"),
+        )
+    ],
+    "sad": [(("00100", "01110", "11111", "11111", "01111", "00111", "00000"),) * 2],
+    "loading": [
+        (("00000", "00000", "11111", "11111", "00000", "00000", "00000"),) * 2,
+        (("00000", "01110", "11111", "11111", "01110", "00000", "00000"),) * 2,
+        (("00100", "01110", "11111", "11111", "11111", "01110", "00100"),) * 2,
+        (("00000", "00000", "01110", "11111", "01110", "00000", "00000"),) * 2,
+    ],
+}
 
 
 @dataclass(slots=True)
@@ -26,6 +60,7 @@ class UIMessage:
     message_id: int
     speaker: str
     text: str
+    emotion: str | None = None
 
 
 class DesktopMirror:
@@ -47,11 +82,18 @@ class DesktopMirror:
         self._thread.start()
         self._ready.wait(timeout=3)
 
-    def post(self, speaker: str, text: str, kind: str = "append", message_id: int | None = None) -> int:
+    def post(
+        self,
+        speaker: str,
+        text: str,
+        kind: str = "append",
+        message_id: int | None = None,
+        emotion: str | None = None,
+    ) -> int:
         if self._failed:
             return -1
         actual_id = next(self._ids) if message_id is None else message_id
-        self._queue.put(UIMessage(kind=kind, message_id=actual_id, speaker=speaker, text=text))
+        self._queue.put(UIMessage(kind=kind, message_id=actual_id, speaker=speaker, text=text, emotion=emotion))
         return actual_id
 
     def _run(self) -> None:
@@ -64,24 +106,70 @@ class DesktopMirror:
                 root.attributes("-fullscreen", True)
             else:
                 root.geometry(self.config.app_ui_geometry)
-            root.configure(bg="#000000")
+            root.configure(bg=EYE_COLORS["bg"])
+
+            frame = tk.Frame(root, bg=EYE_COLORS["bg"])
+            frame.pack(fill=tk.BOTH, expand=True)
+
+            eyes = tk.Canvas(
+                frame,
+                bg=EYE_COLORS["bg"],
+                height=260,
+                relief=tk.FLAT,
+                bd=0,
+                highlightthickness=0,
+            )
+            eyes.pack(fill=tk.X, padx=48, pady=(36, 12))
 
             transcript = tk.Text(
-                root,
+                frame,
                 wrap=tk.WORD,
                 font=("Helvetica", 24),
-                bg="#000000",
-                fg="#f2f2f2",
-                insertbackground="#f2f2f2",
+                bg=EYE_COLORS["bg"],
+                fg=EYE_COLORS["text"],
+                insertbackground=EYE_COLORS["text"],
                 relief=tk.FLAT,
                 bd=0,
                 highlightthickness=0,
                 padx=48,
-                pady=48,
+                pady=24,
             )
             transcript.pack(fill=tk.BOTH, expand=True)
             transcript.configure(state=tk.DISABLED)
             rendered: list[UIMessage] = []
+            current_emotion = "neutral"
+            animation_index = 0
+
+            def draw_eyes(emotion: str) -> None:
+                nonlocal animation_index
+                eyes.delete("all")
+                frames = EMOTION_FRAMES.get(emotion, EMOTION_FRAMES["neutral"])
+                left_rows, right_rows = frames[animation_index % len(frames)]
+                canvas_width = max(eyes.winfo_width(), 900)
+                pixel = 24
+                gap = 4
+                eye_gap = 150
+                rows = len(left_rows)
+                cols = len(left_rows[0])
+                eye_width = cols * pixel + (cols - 1) * gap
+                total_width = eye_width * 2 + eye_gap
+                start_x = (canvas_width - total_width) / 2
+                start_y = 32
+
+                def draw_eye(rows_data: tuple[str, ...], x_offset: float) -> None:
+                    for row_index, row in enumerate(rows_data):
+                        for col_index, value in enumerate(row):
+                            x1 = x_offset + col_index * (pixel + gap)
+                            y1 = start_y + row_index * (pixel + gap)
+                            x2 = x1 + pixel
+                            y2 = y1 + pixel
+                            color = EYE_COLORS["pixel_on"] if value == "1" else EYE_COLORS["pixel_off"]
+                            outline = EYE_COLORS["glow"] if value == "1" else EYE_COLORS["panel"]
+                            eyes.create_rectangle(x1, y1, x2, y2, fill=color, outline=outline, width=1)
+
+                draw_eye(left_rows, start_x)
+                draw_eye(right_rows, start_x + eye_width + eye_gap)
+                animation_index += 1
 
             def redraw() -> None:
                 transcript.configure(state=tk.NORMAL)
@@ -91,7 +179,13 @@ class DesktopMirror:
                 transcript.see(tk.END)
                 transcript.configure(state=tk.DISABLED)
 
+            def animate() -> None:
+                draw_eyes(current_emotion)
+                delay = 220 if current_emotion == "loading" else 700
+                root.after(delay, animate)
+
             def pump() -> None:
+                nonlocal current_emotion, animation_index
                 while True:
                     try:
                         item = self._queue.get_nowait()
@@ -106,11 +200,16 @@ class DesktopMirror:
                             rendered.append(item)
                     else:
                         rendered.append(item)
+                    if item.emotion:
+                        current_emotion = item.emotion
+                        animation_index = 0
                     redraw()
                 root.after(100, pump)
 
             root.bind("<Escape>", lambda _event: root.attributes("-fullscreen", False))
             self._ready.set()
+            draw_eyes(current_emotion)
+            animate()
             pump()
             root.mainloop()
         except Exception:
@@ -148,23 +247,33 @@ class AmeegoAssistant:
                     continue
 
                 self.desktop.post("you", prompt)
-                thinking_id = self.desktop.post(self.config.robot_name.lower(), "thinking...")
+                thinking_id = self.desktop.post(
+                    self.config.robot_name.lower(),
+                    "thinking...",
+                    emotion="loading",
+                )
                 print(f"{self.config.robot_name.lower()}> thinking...")
                 reply = self.ask(prompt)
-                self.desktop.post(self.config.robot_name.lower(), reply, kind="replace", message_id=thinking_id)
-                self._print_reply(reply)
-                self._speak_reply(reply)
+                self.desktop.post(
+                    self.config.robot_name.lower(),
+                    reply.text,
+                    kind="replace",
+                    message_id=thinking_id,
+                    emotion=reply.emotion,
+                )
+                self._print_reply(reply.text)
+                self._speak_reply(reply.text)
         except KeyboardInterrupt:
             print("\nbye")
 
-    def ask(self, prompt: str) -> str:
+    def ask(self, prompt: str) -> AssistantReply:
         clean_prompt = prompt.strip()
         if not clean_prompt:
             raise ValueError("Prompt cannot be empty.")
 
         self.history.append({"role": "user", "text": clean_prompt})
         reply = self.llm.respond(self.history)
-        self.history.append({"role": "assistant", "text": reply})
+        self.history.append({"role": "assistant", "text": reply.text})
         return reply
 
     def _print_reply(self, reply: str) -> None:
@@ -216,11 +325,17 @@ def main() -> None:
     if args.text:
         assistant.desktop.start()
         assistant.desktop.post("you", args.text)
-        thinking_id = assistant.desktop.post(config.robot_name.lower(), "thinking...")
+        thinking_id = assistant.desktop.post(config.robot_name.lower(), "thinking...", emotion="loading")
         reply = assistant.ask(args.text)
-        assistant.desktop.post(config.robot_name.lower(), reply, kind="replace", message_id=thinking_id)
-        print(f"{config.robot_name}: {reply}")
-        assistant._speak_reply(reply)
+        assistant.desktop.post(
+            config.robot_name.lower(),
+            reply.text,
+            kind="replace",
+            message_id=thinking_id,
+            emotion=reply.emotion,
+        )
+        print(f"{config.robot_name}: {reply.text}")
+        assistant._speak_reply(reply.text)
         time.sleep(0.5)
         return
 
