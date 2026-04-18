@@ -108,6 +108,26 @@ make run
 make once
 ```
 
+## Eye Preview In Terminal
+
+To inspect the exact live eye frames used by the Pi renderer:
+
+```bash
+python preview_eyes.py
+```
+
+Preview one emotion:
+
+```bash
+python preview_eyes.py --emotion blink
+```
+
+Animate one emotion in the terminal:
+
+```bash
+python preview_eyes.py --emotion speaking --animate
+```
+
 ## Notes
 
 - Conversation history is kept only for the current process.
