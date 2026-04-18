@@ -25,15 +25,16 @@ ameego/
 - One-shot prompt mode for scripting
 - Conversation memory during the current session
 - Environment-driven configuration
-- Optional fullscreen desktop mirror on the Pi display
-- Minimal Raspberry Pi setup with no audio dependencies
+- Fullscreen desktop mirror on the Pi display
+- Spoken replies through the Pi speaker output
 
 ## Architecture
 
 1. `assistant.py` runs a simple terminal REPL.
 2. `config.py` loads environment variables.
 3. `llm.py` sends conversation history to OpenAI and returns the reply.
-4. `assistant.py` can also mirror the conversation into a simple fullscreen Tk window on the Pi desktop.
+4. `assistant.py` mirrors the conversation into a simple fullscreen Tk window on the Pi desktop.
+5. `tts.py` sends the reply to OpenAI TTS and plays it with `aplay`.
 
 ## Raspberry Pi setup
 
@@ -47,6 +48,7 @@ cd ~/ameego
 ### 2. Create a virtualenv and install dependencies
 
 ```bash
+sudo apt install -y alsa-utils
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip wheel setuptools
@@ -65,12 +67,13 @@ Minimum `.env` changes:
 - Set `OPENAI_API_KEY`
 - Optionally change `ROBOT_NAME`
 - Optionally change `OPENAI_CHAT_MODEL`
+- Confirm `AUDIO_OUTPUT_DEVICE=plughw:1,0` for the Pi headphone jack
 
 ### 4. Run Ameego interactively over SSH
 
 ```bash
 source .venv/bin/activate
-DISPLAY=:0 XAUTHORITY=/home/janjs/.Xauthority python assistant.py
+python assistant.py
 ```
 
 You will see a simple terminal UI:
@@ -81,12 +84,13 @@ Type a message and press Enter.
 Commands: /help, /clear, /quit
 ```
 
-If the Pi is logged into its desktop session, the same conversation will also appear in a fullscreen window on the attached display. Press `Esc` on the Pi keyboard to leave fullscreen.
+If the Pi is logged into its desktop session, the same conversation will also appear in a fullscreen window on the attached display. While a reply is loading, the Pi screen shows `thinking...`. Press `Esc` on the Pi keyboard to leave fullscreen.
+By default, the app assumes `DISPLAY=:0` and `~/.Xauthority`, which matches the common Raspberry Pi desktop setup.
 
 ### 5. Run a single prompt
 
 ```bash
-DISPLAY=:0 XAUTHORITY=/home/janjs/.Xauthority python assistant.py --text "Summarize why my Raspberry Pi setup kept failing earlier"
+python assistant.py --text "Summarize why my Raspberry Pi setup kept failing earlier"
 ```
 
 ## Commands inside the terminal app
@@ -106,6 +110,6 @@ make once
 ## Notes
 
 - Conversation history is kept only for the current process.
-- This version does not use the microphone, speakers, wake word, or eyes.
-- If `DISPLAY` is not set, the desktop mirror quietly stays disabled and the terminal app still works.
+- This version does not use the microphone, wake word, or eyes.
+- If your Pi uses a different desktop display or Xauthority path, override `APP_UI_DISPLAY` or `APP_UI_XAUTHORITY` in `.env`.
 - The included `deploy/ameego.service` file is left in the repo from the earlier voice-oriented version, but it is not useful for an interactive SSH-only workflow.
