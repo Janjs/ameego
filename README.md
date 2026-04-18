@@ -15,6 +15,7 @@ ameego/
 ├── eyes.py
 ├── llm.py
 ├── requirements.txt
+├── requirements-wakeword.txt
 ├── stt.py
 ├── test_audio_devices.py
 ├── test_eyes.py
@@ -88,7 +89,7 @@ sudo apt install -y \
   alsa-utils
 ```
 
-If `openWakeWord` or ONNX wheels are troublesome on your Pi image, install `tflite-runtime` manually inside the virtualenv after the main dependency install.
+If your Pi is running 32-bit Raspberry Pi OS (`armv7l`), `openWakeWord` may fail because `onnxruntime` wheels are not available there. In that case, install the base app first and use push-to-talk mode. Wake-word mode is best supported on 64-bit Raspberry Pi OS.
 
 ### 4. Create a virtualenv and install Python dependencies
 
@@ -99,10 +100,16 @@ python -m pip install --upgrade pip wheel setuptools
 pip install -r requirements.txt
 ```
 
-If needed for Raspberry Pi:
+If your Pi is 64-bit and you want wake-word support:
 
 ```bash
-pip install tflite-runtime
+pip install -r requirements-wakeword.txt
+```
+
+If your Pi is 32-bit, skip `requirements-wakeword.txt` and use:
+
+```bash
+python assistant.py --push-to-talk
 ```
 
 ### 5. Configure environment variables
@@ -172,6 +179,7 @@ Press Enter, ask a question, wait for the reply, then type `q` to quit.
 
 ```bash
 source .venv/bin/activate
+pip install -r requirements-wakeword.txt
 python assistant.py
 ```
 
@@ -252,6 +260,7 @@ The provided start script activates the virtualenv, loads `.env`, and launches t
 - If `sounddevice` lists a different device name than expected, copy that exact name into `.env`.
 - If the assistant hears itself, increase `PLAYBACK_COOLDOWN_SECONDS` to `1.5` or `2.0`.
 - If wake-word detection feels too eager or too sluggish, tune `WAKEWORD_THRESHOLD` up or down by `0.05`.
+- If `pip install -r requirements-wakeword.txt` fails with `onnxruntime` on `armv7l`, your Pi is on 32-bit userspace. Use push-to-talk or reinstall a 64-bit Raspberry Pi OS.
 - If `pygame` fails over SSH without a display, run with `--disable-eyes` or export `SDL_VIDEODRIVER=dummy`.
 - If your Pi uses PipeWire or PulseAudio on top of ALSA, double-check which backend `sounddevice` resolves to when you list devices.
 

@@ -4,7 +4,6 @@ import logging
 from pathlib import Path
 
 import sounddevice as sd
-from openwakeword.model import Model
 
 from audio import AudioIO
 from config import Config
@@ -20,16 +19,29 @@ class WakeWordDetector:
         self.label = config.wake_word_name
         self.chunk_size = 1280
         self.sample_rate = 16000
+        self._model_cls = self._import_model_class()
         self.model = self._build_model()
 
-    def _build_model(self) -> Model:
+    def _import_model_class(self):
+        try:
+            from openwakeword.model import Model
+        except ImportError as exc:
+            raise RuntimeError(
+                "openWakeWord is not installed or is unsupported on this Pi build. "
+                "On 32-bit Raspberry Pi OS, onnxruntime wheels are usually unavailable. "
+                "Use --push-to-talk for now, or move to a 64-bit Raspberry Pi OS and then "
+                "install `pip install -r requirements-wakeword.txt`."
+            ) from exc
+        return Model
+
+    def _build_model(self):
         custom_path = self.config.wakeword_model_path
         if custom_path:
             path = Path(custom_path).expanduser()
             if path.exists():
                 logger.info("Loading custom wake word model from %s", path)
                 self.label = path.stem
-                return Model(wakeword_models=[str(path)])
+                return self._model_cls(wakeword_models=[str(path)])
             logger.warning("Custom wake word model path not found: %s", path)
 
         logger.info(
@@ -38,7 +50,7 @@ class WakeWordDetector:
             self.config.wake_word_name,
         )
         self.label = self.config.wakeword_builtin_model
-        return Model()
+        return self._model_cls()
 
     def wait_for_wake_word(self) -> str:
         logger.info("Waiting for wake word '%s'...", self.label)

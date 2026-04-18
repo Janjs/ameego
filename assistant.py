@@ -97,7 +97,13 @@ class AmeegoAssistant:
 
     def _run_wake_word_loop(self) -> None:
         if self.wakeword is None:
-            self.wakeword = WakeWordDetector(self.config, self.audio)
+            try:
+                self.wakeword = WakeWordDetector(self.config, self.audio)
+            except RuntimeError:
+                logger.exception("Wake-word mode is unavailable")
+                self.eyes.set_state("error")
+                sleep_with_interrupt(1.0)
+                raise
         while True:
             self._update_idle_state()
             detected = self.wakeword.wait_for_wake_word()
