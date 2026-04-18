@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import math
 import os
 import queue
 import textwrap
@@ -51,6 +52,18 @@ EMOTION_FRAMES: dict[str, list[tuple[tuple[str, ...], tuple[str, ...]]]] = {
         (("00100", "01110", "11111", "11111", "11111", "01110", "00100"),) * 2,
         (("00000", "00000", "01110", "11111", "01110", "00000", "00000"),) * 2,
     ],
+    "blink": [(("00000", "00000", "11111", "11111", "00000", "00000", "00000"),) * 2],
+    "speaking": [
+        (("01110", "11111", "11111", "11111", "11111", "11111", "01110"),) * 2,
+        (
+            ("00100", "01110", "11111", "11111", "11111", "01110", "00100"),
+            ("01110", "11111", "11111", "11111", "11111", "11111", "01110"),
+        ),
+        (
+            ("01110", "11111", "11111", "11111", "11111", "11111", "01110"),
+            ("00100", "01110", "11111", "11111", "11111", "01110", "00100"),
+        ),
+    ],
 }
 
 
@@ -71,6 +84,7 @@ class DesktopMirror:
         self._ready = threading.Event()
         self._failed = False
         self._ids = count(1)
+        self._idle_reset_at = 0.0
 
     def start(self) -> None:
         if not self.config.app_ui_enabled:
@@ -95,6 +109,12 @@ class DesktopMirror:
         actual_id = next(self._ids) if message_id is None else message_id
         self._queue.put(UIMessage(kind=kind, message_id=actual_id, speaker=speaker, text=text, emotion=emotion))
         return actual_id
+
+    def set_emotion(self, emotion: str) -> None:
+        self.post("", "", kind="state", emotion=emotion)
+
+    def schedule_idle(self) -> None:
+        self._idle_reset_at = time.monotonic() + self.config.app_ui_idle_after_seconds
 
     def _run(self) -> None:
         try:
@@ -139,6 +159,8 @@ class DesktopMirror:
             rendered: list[UIMessage] = []
             current_emotion = "neutral"
             animation_index = 0
+            next_blink_at = time.monotonic() + 2.5
+            blink_end_at = 0.0
 
             def draw_eyes(emotion: str) -> None:
                 nonlocal animation_index
@@ -169,6 +191,25 @@ class DesktopMirror:
 
                 draw_eye(left_rows, start_x)
                 draw_eye(right_rows, start_x + eye_width + eye_gap)
+
+                if emotion in {"neutral", "happy", "curious", "surprised", "sad"}:
+                    glow_wobble = 8 + 4 * math.sin(time.monotonic() * 2.0)
+                    eyes.create_oval(
+                        start_x - glow_wobble,
+                        start_y - glow_wobble,
+                        start_x + eye_width + glow_wobble,
+                        start_y + rows * (pixel + gap),
+                        outline=EYE_COLORS["glow"],
+                        width=1,
+                    )
+                    eyes.create_oval(
+                        start_x + eye_width + eye_gap - glow_wobble,
+                        start_y - glow_wobble,
+                        start_x + eye_width * 2 + eye_gap + glow_wobble,
+                        start_y + rows * (pixel + gap),
+                        outline=EYE_COLORS["glow"],
+                        width=1,
+                    )
                 animation_index += 1
 
             def redraw() -> None:
@@ -180,8 +221,24 @@ class DesktopMirror:
                 transcript.configure(state=tk.DISABLED)
 
             def animate() -> None:
-                draw_eyes(current_emotion)
-                delay = 220 if current_emotion == "loading" else 700
+                nonlocal current_emotion, next_blink_at, blink_end_at, animation_index
+                now = time.monotonic()
+                draw_emotion = current_emotion
+
+                if self._idle_reset_at and now >= self._idle_reset_at:
+                    current_emotion = "neutral"
+                    self._idle_reset_at = 0.0
+                    animation_index = 0
+
+                if current_emotion == "neutral":
+                    if now >= next_blink_at:
+                        blink_end_at = now + 0.18
+                        next_blink_at = now + 2.5 + ((math.sin(now) + 1.0) * 1.3)
+                    if now < blink_end_at:
+                        draw_emotion = "blink"
+
+                draw_eyes(draw_emotion)
+                delay = 220 if current_emotion in {"loading", "speaking"} else 700
                 root.after(delay, animate)
 
             def pump() -> None:
@@ -191,6 +248,11 @@ class DesktopMirror:
                         item = self._queue.get_nowait()
                     except queue.Empty:
                         break
+                    if item.kind == "state":
+                        if item.emotion:
+                            current_emotion = item.emotion
+                            animation_index = 0
+                        continue
                     if item.kind == "replace":
                         for index, existing in enumerate(rendered):
                             if existing.message_id == item.message_id:
@@ -203,6 +265,8 @@ class DesktopMirror:
                     if item.emotion:
                         current_emotion = item.emotion
                         animation_index = 0
+                        if item.emotion not in {"loading", "speaking"}:
+                            self.schedule_idle()
                     redraw()
                 root.after(100, pump)
 
@@ -262,7 +326,7 @@ class AmeegoAssistant:
                     emotion=reply.emotion,
                 )
                 self._print_reply(reply.text)
-                self._speak_reply(reply.text)
+                self._speak_reply(reply.text, reply.emotion)
         except KeyboardInterrupt:
             print("\nbye")
 
@@ -280,11 +344,14 @@ class AmeegoAssistant:
         wrapped = textwrap.fill(reply, width=88)
         print(f"{self.config.robot_name.lower()}> {wrapped}")
 
-    def _speak_reply(self, reply: str) -> None:
+    def _speak_reply(self, reply: str, emotion: str) -> None:
         try:
+            self.desktop.set_emotion("speaking" if emotion == "neutral" else emotion)
             self.tts.speak(reply)
         except Exception:
             logger.exception("TTS playback failed")
+        finally:
+            self.desktop.schedule_idle()
 
     def _header(self) -> str:
         return "\n".join(
@@ -335,7 +402,7 @@ def main() -> None:
             emotion=reply.emotion,
         )
         print(f"{config.robot_name}: {reply.text}")
-        assistant._speak_reply(reply.text)
+        assistant._speak_reply(reply.text, reply.emotion)
         time.sleep(0.5)
         return
 

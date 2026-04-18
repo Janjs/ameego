@@ -39,6 +39,7 @@ class Config:
     app_ui_geometry: str
     app_ui_display: str
     app_ui_xauthority: str
+    app_ui_idle_after_seconds: int
     log_level: str
 
     @classmethod
@@ -57,6 +58,7 @@ class Config:
             app_ui_geometry=os.getenv("APP_UI_GEOMETRY", "1280x720"),
             app_ui_display=os.getenv("APP_UI_DISPLAY", ":0"),
             app_ui_xauthority=os.getenv("APP_UI_XAUTHORITY", str(Path.home() / ".Xauthority")),
+            app_ui_idle_after_seconds=_get_int("APP_UI_IDLE_AFTER_SECONDS", 6),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         )
 
