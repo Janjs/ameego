@@ -1,0 +1,16 @@
+[Unit]
+Description=Ameego Raspberry Pi Voice Assistant
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/ameego
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/pi/ameego/scripts/start_ameego.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
