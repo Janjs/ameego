@@ -25,13 +25,15 @@ ameego/
 - One-shot prompt mode for scripting
 - Conversation memory during the current session
 - Environment-driven configuration
-- Minimal Raspberry Pi setup with no audio or display dependencies
+- Optional fullscreen desktop mirror on the Pi display
+- Minimal Raspberry Pi setup with no audio dependencies
 
 ## Architecture
 
 1. `assistant.py` runs a simple terminal REPL.
 2. `config.py` loads environment variables.
 3. `llm.py` sends conversation history to OpenAI and returns the reply.
+4. `assistant.py` can also mirror the conversation into a simple fullscreen Tk window on the Pi desktop.
 
 ## Raspberry Pi setup
 
@@ -68,7 +70,7 @@ Minimum `.env` changes:
 
 ```bash
 source .venv/bin/activate
-python assistant.py
+DISPLAY=:0 XAUTHORITY=/home/janjs/.Xauthority python assistant.py
 ```
 
 You will see a simple terminal UI:
@@ -79,10 +81,12 @@ Type a message and press Enter.
 Commands: /help, /clear, /quit
 ```
 
+If the Pi is logged into its desktop session, the same conversation will also appear in a fullscreen window on the attached display. Press `Esc` on the Pi keyboard to leave fullscreen.
+
 ### 5. Run a single prompt
 
 ```bash
-python assistant.py --text "Summarize why my Raspberry Pi setup kept failing earlier"
+DISPLAY=:0 XAUTHORITY=/home/janjs/.Xauthority python assistant.py --text "Summarize why my Raspberry Pi setup kept failing earlier"
 ```
 
 ## Commands inside the terminal app
@@ -103,4 +107,5 @@ make once
 
 - Conversation history is kept only for the current process.
 - This version does not use the microphone, speakers, wake word, or eyes.
+- If `DISPLAY` is not set, the desktop mirror quietly stays disabled and the terminal app still works.
 - The included `deploy/ameego.service` file is left in the repo from the earlier voice-oriented version, but it is not useful for an interactive SSH-only workflow.

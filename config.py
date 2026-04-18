@@ -11,6 +11,13 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def _get_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _get_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None or raw == "":
@@ -24,6 +31,9 @@ class Config:
     robot_name: str
     chat_model: str
     max_output_tokens: int
+    app_ui_enabled: bool
+    app_ui_fullscreen: bool
+    app_ui_geometry: str
     log_level: str
 
     @classmethod
@@ -34,6 +44,9 @@ class Config:
             robot_name=os.getenv("ROBOT_NAME", "Ameego"),
             chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini"),
             max_output_tokens=_get_int("OPENAI_MAX_OUTPUT_TOKENS", 250),
+            app_ui_enabled=_get_bool("APP_UI_ENABLED", True),
+            app_ui_fullscreen=_get_bool("APP_UI_FULLSCREEN", True),
+            app_ui_geometry=os.getenv("APP_UI_GEOMETRY", "1280x720"),
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
         )
 
