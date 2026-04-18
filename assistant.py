@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import queue
+import random
 import textwrap
 import threading
 import time
@@ -23,9 +24,8 @@ logger = logging.getLogger(__name__)
 EYE_COLORS = {
     "bg": "#05060b",
     "panel": "#10131d",
-    "pixel_off": "#161d29",
+    "pixel_off": "#05060b",
     "pixel_on": "#33e7f0",
-    "glow": "#82f7fb",
     "text": "#f2f6fb",
 }
 
@@ -52,7 +52,7 @@ EMOTION_FRAMES: dict[str, list[tuple[tuple[str, ...], tuple[str, ...]]]] = {
         (("00100", "01110", "11111", "11111", "11111", "01110", "00100"),) * 2,
         (("00000", "00000", "01110", "11111", "01110", "00000", "00000"),) * 2,
     ],
-    "blink": [(("00000", "00000", "11111", "11111", "00000", "00000", "00000"),) * 2],
+    "blink": [(("00000", "00000", "00000", "11111", "00000", "00000", "00000"),) * 2],
     "speaking": [
         (("01110", "11111", "11111", "11111", "11111", "11111", "01110"),) * 2,
         (
@@ -159,7 +159,7 @@ class DesktopMirror:
             rendered: list[UIMessage] = []
             current_emotion = "neutral"
             animation_index = 0
-            next_blink_at = time.monotonic() + 2.5
+            next_blink_at = time.monotonic() + random.uniform(4.5, 8.5)
             blink_end_at = 0.0
 
             def draw_eyes(emotion: str) -> None:
@@ -167,16 +167,22 @@ class DesktopMirror:
                 eyes.delete("all")
                 frames = EMOTION_FRAMES.get(emotion, EMOTION_FRAMES["neutral"])
                 left_rows, right_rows = frames[animation_index % len(frames)]
-                canvas_width = max(eyes.winfo_width(), 900)
-                pixel = 24
-                gap = 4
-                eye_gap = 150
+                canvas_width = max(eyes.winfo_width(), 320)
+                canvas_height = max(eyes.winfo_height(), 180)
                 rows = len(left_rows)
                 cols = len(left_rows[0])
+                eye_gap = canvas_width * 0.08
+                pixel = min(
+                    (canvas_width * 0.72 - eye_gap) / (cols * 2),
+                    canvas_height * 0.72 / rows,
+                )
+                pixel = max(10, int(pixel))
+                gap = max(2, int(pixel * 0.18))
                 eye_width = cols * pixel + (cols - 1) * gap
+                eye_height = rows * pixel + (rows - 1) * gap
                 total_width = eye_width * 2 + eye_gap
                 start_x = (canvas_width - total_width) / 2
-                start_y = 32
+                start_y = max(16, (canvas_height - eye_height) / 2)
 
                 def draw_eye(rows_data: tuple[str, ...], x_offset: float) -> None:
                     for row_index, row in enumerate(rows_data):
@@ -185,31 +191,19 @@ class DesktopMirror:
                             y1 = start_y + row_index * (pixel + gap)
                             x2 = x1 + pixel
                             y2 = y1 + pixel
-                            color = EYE_COLORS["pixel_on"] if value == "1" else EYE_COLORS["pixel_off"]
-                            outline = EYE_COLORS["glow"] if value == "1" else EYE_COLORS["panel"]
-                            eyes.create_rectangle(x1, y1, x2, y2, fill=color, outline=outline, width=1)
+                            if value == "1":
+                                eyes.create_rectangle(
+                                    x1,
+                                    y1,
+                                    x2,
+                                    y2,
+                                    fill=EYE_COLORS["pixel_on"],
+                                    outline="",
+                                    width=0,
+                                )
 
                 draw_eye(left_rows, start_x)
                 draw_eye(right_rows, start_x + eye_width + eye_gap)
-
-                if emotion in {"neutral", "happy", "curious", "surprised", "sad"}:
-                    glow_wobble = 8 + 4 * math.sin(time.monotonic() * 2.0)
-                    eyes.create_oval(
-                        start_x - glow_wobble,
-                        start_y - glow_wobble,
-                        start_x + eye_width + glow_wobble,
-                        start_y + rows * (pixel + gap),
-                        outline=EYE_COLORS["glow"],
-                        width=1,
-                    )
-                    eyes.create_oval(
-                        start_x + eye_width + eye_gap - glow_wobble,
-                        start_y - glow_wobble,
-                        start_x + eye_width * 2 + eye_gap + glow_wobble,
-                        start_y + rows * (pixel + gap),
-                        outline=EYE_COLORS["glow"],
-                        width=1,
-                    )
                 animation_index += 1
 
             def redraw() -> None:
@@ -233,7 +227,7 @@ class DesktopMirror:
                 if current_emotion == "neutral":
                     if now >= next_blink_at:
                         blink_end_at = now + 0.18
-                        next_blink_at = now + 2.5 + ((math.sin(now) + 1.0) * 1.3)
+                        next_blink_at = now + random.uniform(4.5, 9.5)
                     if now < blink_end_at:
                         draw_emotion = "blink"
 
