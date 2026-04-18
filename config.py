@@ -32,6 +32,16 @@ def _get_int(name: str, default: int) -> int:
     return int(raw)
 
 
+def _get_device(name: str, default: str) -> str | int:
+    raw = os.getenv(name)
+    if raw is None or raw == "":
+        return default
+    value = raw.strip()
+    if value.isdigit():
+        return int(value)
+    return value
+
+
 @dataclass(slots=True)
 class Config:
     openai_api_key: str
@@ -44,8 +54,8 @@ class Config:
     chat_model: str
     tts_model: str
     tts_voice: str
-    input_device: str
-    output_device: str
+    input_device: str | int
+    output_device: str | int
     input_sample_rate: int
     output_sample_rate: int
     channels: int
@@ -77,8 +87,8 @@ class Config:
             chat_model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4.1-mini"),
             tts_model=os.getenv("OPENAI_TTS_MODEL", "gpt-4o-mini-tts"),
             tts_voice=os.getenv("OPENAI_TTS_VOICE", "alloy"),
-            input_device=os.getenv("AUDIO_INPUT_DEVICE", "plughw:2,0"),
-            output_device=os.getenv("AUDIO_OUTPUT_DEVICE", "plughw:1,0"),
+            input_device=_get_device("AUDIO_INPUT_DEVICE", "plughw:2,0"),
+            output_device=_get_device("AUDIO_OUTPUT_DEVICE", "plughw:1,0"),
             input_sample_rate=_get_int("AUDIO_SAMPLE_RATE", 16000),
             output_sample_rate=_get_int("AUDIO_OUTPUT_SAMPLE_RATE", 24000),
             channels=_get_int("AUDIO_CHANNELS", 1),
